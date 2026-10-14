@@ -250,6 +250,11 @@ class SacnReceiver:
     def _handle_packet(self, universe: int, packet: Any) -> None:
         if not self._running:
             return
+        if getattr(packet, "option_StreamTerminated", False):
+            # E1.31 6.2.6: property values in a terminating packet are ignored.
+            # The sacn library reports the stream lost and then still delivers
+            # this packet's data, which would revive a stream that has ended.
+            return
         cid = _packet_cid(packet)
         if self._ignore_cid is not None and cid == self._ignore_cid:
             return

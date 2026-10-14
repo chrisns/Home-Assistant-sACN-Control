@@ -96,6 +96,22 @@ def test_receiver_reports_stream_timeout_only_while_running() -> None:
     assert receiver.running
 
 
+class _Packet:
+    def __init__(self, terminated: bool) -> None:
+        self.dmxData = (1, 2, 3)
+        self.option_StreamTerminated = terminated
+
+
+def test_receiver_ignores_data_in_stream_termination_packets() -> None:
+    got: list[int] = []
+    receiver = SacnReceiver(bind_ip=None, on_dmx=lambda universe, dmx, cid: got.append(universe))
+    receiver._running = True
+    receiver._handle_packet(1, _Packet(terminated=True))
+    assert got == []
+    receiver._handle_packet(1, _Packet(terminated=False))
+    assert got == [1]
+
+
 class _FakeSacnLib:
     """Stands in for sacn.sACNreceiver, recording what the wrapper asks of it."""
 
@@ -271,6 +287,10 @@ def test_real_library_stream_resuming_with_the_same_data_is_delivered(
     handler.on_periodic_callback(5.0)  # data loss timeout
     handler.on_data(_packet(2, 10), 6.0)  # same look again
     assert events == [("dmx", 1, 10), ("lost", 1), ("dmx", 1, 10)]
+    events.clear()
+    handler.on_data(_packet(3, 10, terminated=True), 7.0)
+    handler.on_data(_packet(4, 10), 8.0)
+    assert events == [("lost", 1), ("dmx", 1, 10)]  # termination carries no data
 
 
 def test_real_library_resubscribe_does_not_leak_callbacks(monkeypatch: pytest.MonkeyPatch) -> None:
